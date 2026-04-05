@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>碳中和小屋 | 储能电路演示：过载保护器（控制器下侧）</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            background: linear-gradient(145deg, #d4e9da 0%, #bdd9c5 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', 'Roboto', 'Poppins', system-ui, -apple-system, 'Microsoft YaHei', sans-serif;
+            padding: 20px;
+        }
+
+        .demo-container {
+            background: rgba(250, 255, 245, 0.85);
+            backdrop-filter: blur(3px);
+            border-radius: 2.8rem;
+            box-shadow: 0 30px 50px rgba(0, 30, 0, 0.35);
+            padding: 1.5rem;
+            border: 1px solid rgba(100, 160, 80, 0.6);
+        }
+
+        canvas {
+            display: block;
+            margin: 0 auto;
+            border-radius: 2rem;
+            background: #fffff2;
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25);
+            cursor: pointer;
+            width: 100%;
+            height: auto;
+        }
+
+        .control-bar {
+            margin-top: 1.5rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        button {
+            background: #2a6b2e;
+            border: none;
+            padding: 0.8rem 1.8rem;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-radius: 3.5rem;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+            font-family: inherit;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        button i {
+            font-style: normal;
+            font-size: 1.3rem;
+        }
+
+        button:hover {
+            transform: scale(1.02);
+            background: #1c5420;
+            box-shadow: 0 6px 14px rgba(0,0,0,0.3);
+        }
+
+        .active-mode {
+            background: #e67e22;
+            box-shadow: 0 0 0 3px #ffdd99, 0 6px 14px black;
+        }
+
+        .mode-status {
+            background: #1e3a1ecc;
+            backdrop-filter: blur(10px);
+            padding: 0.6rem 1.4rem;
+            border-radius: 3rem;
+            font-weight: bold;
+            color: #fef7cf;
+            font-size: 1rem;
+            letter-spacing: 1px;
+            border: 1px solid #c6e0b4;
+        }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 1.5rem;
+            margin-top: 1.2rem;
+            font-size: 0.85rem;
+            background: #eef5ea;
+            padding: 0.6rem 1.4rem;
+            border-radius: 2.5rem;
+            color: #1f4521;
+            font-weight: 500;
+        }
+
+        .legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .flow-dot {
+            width: 14px;
+            height: 14px;
+            background: #f5b042;
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 5px gold;
+        }
+        .flow-dot.green {
+            background: #3bc43b;
+            box-shadow: 0 0 6px #6eff6e;
+        }
+        .flow-dot.blue {
+            background: #3a86ff;
+            box-shadow: 0 0 6px #7ab3ff;
+        }
+
+        @media (max-width: 700px) {
+            .legend { font-size: 0.7rem; gap: 1rem; }
+            button { padding: 0.5rem 1.2rem; font-size: 0.9rem;}
+            .mode-status { font-size: 0.8rem; }
+        }
+
+        footer {
+            text-align: center;
+            font-size: 0.75rem;
+            margin-top: 1rem;
+            color: #2a6228;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+<div>
+    <div class="demo-container">
+        <canvas id="energyCanvas" width="1200" height="760" style="width:100%; height:auto; max-width:1200px; aspect-ratio:1200/760"></canvas>
+
+        <div class="control-bar">
+            <button id="chargeBtn" class="active-mode">🔆 充电模式 <span style="font-size:0.9rem;">(太阳能→蓄电池)</span></button>
+            <button id="dischargeBtn">⚡ 放电模式 <span style="font-size:0.9rem;">(蓄电池→用电器)</span></button>
+            <div class="mode-status" id="modeText">🌱 当前：充电储能 · 光伏给电池充电</div>
+        </div>
+
+        <div class="legend">
+            <span>🔆 太阳能板</span>
+            <span>⚙️ 光伏控制器</span>
+            <span>⚠️ 过载保护器 (控制器下侧)</span>
+            <span>🔋 蓄电池组</span>
+            <span>🔌 USB拓展坞</span>
+            <span>⚡ 24V变压器</span>
+            <span>✨ <span class="flow-dot"></span> 能量粒子流向</span>
+            <span>🎯 充电<span class="flow-dot green"></span> → 电池</span>
+            <span>💡 放电<span class="flow-dot blue"></span> → 保护器→负载</span>
+        </div>
+        <footer>⚡ 过载保护器位于光伏控制器下侧（放电时保护后端电路）；充电时能量不经过保护器，减少损耗。文字/图标放大，演示清晰。</footer>
+    </div>
+</div>
+
+<script>
+    (function(){
+        const canvas = document.getElementById('energyCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const width = 1200, height = 760;
+        canvas.width = width;
+        canvas.height = height;
+
+        // ========= 元件坐标 (过载保护器位于控制器与负载之间) =========
+        const nodes = {
+            solar:      { x: 110, y: 180, label: "太阳能板", icon: "☀️" },
+            control:    { x: 320, y: 180, label: "光伏控制器", icon: "⚙️" },
+            battery:    { x: 580, y: 180, label: "蓄电池组", icon: "🔋" },
+            overload:   { x: 450, y: 360, label: "过载保护器", icon: "⚠️" },   // 控制器下侧
+            usbHub:     { x: 270, y: 520, label: "USB 拓展坞", icon: "🔌" },
+            trans24V:   { x: 630, y: 540, label: "24V 变压器", icon: "⚡" },
+            load5V:     { x: 160, y: 650, label: "5V 用电器", icon: "📺" },
+            load12V:    { x: 420, y: 680, label: "12V 用电器", icon: "💧" },
+            load24V:    { x: 680, y: 670, label: "24V 用电器", icon: "❄️" },
+            inverter:   { x: 930, y: 480, label: "220V 逆变器", icon: "⚡" }
+        };
+
+        const loadDetails = {
+            load5V:   ["📺 电视", "🔊 音响", "💡 灯带", "🔋 移动电源"],
+            load12V:  ["💧 水泵"],
+            load24V:  ["❄️ 制冷压缩机", "🌀 小风扇", "🔄 换热器风扇"],
+            inverter: ["💡 交流设备", "🔌 通用插座"]
+        };
+
+        // ---------- 充电模式：太阳能→控制器→蓄电池 (不经过过载保护器) ----------
+        const getChargePaths = () => [
+            { from: 'solar', to: 'control', color: '#FFB347', particleColor: '#f5b042', speed: 0.012, name: 'pvToCtrl' },
+            { from: 'control', to: 'battery', color: '#6fbf4c', particleColor: '#3bc43b', speed: 0.012, name: 'ctrlToBat' }
+        ];
+        
+        // 放电模式：蓄电池→控制器→过载保护器→然后分流到各负载 (逆变器直连电池)
+        const getDischargePaths = () => [
+            { from: 'battery', to: 'control', color: '#3a86ff', particleColor: '#3a86ff', speed: 0.012, name: 'batToCtrl' },
+            { from: 'control', to: 'overload', color: '#3a86ff', particleColor: '#3a86ff', speed: 0.012, name: 'ctrlToOvp' },
+            // 过载保护器 → USB拓展坞 → 5V
+            { from: 'overload', to: 'usbHub', color: '#3a86ff', particleColor: '#3a86ff', speed: 0.011, name: 'ovpToUsb' },
+            { from: 'usbHub', to: 'load5V', color: '#3a86ff', particleColor: '#3a86ff', speed: 0.011, name: 'usbTo5V' },
+            // 过载保护器 → 12V 直接
+            { from: 'overload', to: 'load12V', color: '#3a86ff', particleColor: '#3a86ff', speed: 0.011, name: 'ovpTo12V' },
+            // 过载保护器 → 24V变压器 → 24V负载
+            { from: 'overload', to: 'trans24V', color: '#3a86ff', particleColor: '#3a86ff', speed: 0.011, name: 'ovpToTrans' },
+            { from: 'trans24V', to: 'load24V', color: '#3a86ff', particleColor: '#3a86ff', speed: 0.011, name: 'transTo24V' },
+            // 逆变器直接从蓄电池取电 (不经过过载保护器)
+            { from: 'battery', to: 'inverter', color: '#3a86ff', particleColor: '#3a86ff', speed: 0.01, name: 'batToInv' }
+        ];
+
+        let currentMode = 'charge';
+        let pathManagers = [];
+        let batterySOC = 50;
+
+        function getNodePos(nodeId) {
+            return nodes[nodeId] ? { x: nodes[nodeId].x, y: nodes[nodeId].y } : null;
+        }
+
+        class FlowParticle {
+            constructor(t = 0, speed) {
+                this.t = t;
+                this.speed = speed;
+                this.radius = 5;
+            }
+        }
+
+        function rebuildPathsByMode() {
+            let newPathDefs = currentMode === 'charge' ? getChargePaths() : getDischargePaths();
+            const newManagers = [];
+            for (const def of newPathDefs) {
+                const fromPos = getNodePos(def.from);
+                const toPos = getNodePos(def.to);
+                if (!fromPos || !toPos) continue;
+                newManagers.push({
+                    pathDef: def,
+                    fromPos: fromPos,
+                    toPos: toPos,
+                    length: Math.hypot(toPos.x - fromPos.x, toPos.y - fromPos.y),
+                    particles: [],
+                    speedBase: def.speed,
+                });
+            }
+            pathManagers = newManagers;
+        }
+
+        function setMode(mode) {
+            if (mode === currentMode) return;
+            currentMode = mode;
+            rebuildPathsByMode();
+            const chargeBtn = document.getElementById('chargeBtn');
+            const disBtn = document.getElementById('dischargeBtn');
+            const modeSpan = document.getElementById('modeText');
+            if (currentMode === 'charge') {
+                chargeBtn.classList.add('active-mode');
+                disBtn.classList.remove('active-mode');
+                modeSpan.innerHTML = '🔆 充电模式 · 太阳能 → 控制器 → 蓄电池 (不过载保护器)';
+            } else {
+                disBtn.classList.add('active-mode');
+                chargeBtn.classList.remove('active-mode');
+                modeSpan.innerHTML = '⚡ 放电模式 · 蓄电池 → 控制器 → 过载保护器 → USB/12V/24V负载，逆变器直连电池';
+            }
+        }
+
+        function updateBatteryByMode() {
+            if (currentMode === 'charge') {
+                batterySOC = Math.min(100, batterySOC + 0.28);
+            } else {
+                batterySOC = Math.max(0, batterySOC - 0.22);
+            }
+        }
+
+        function updateParticles() {
+            for (const mgr of pathManagers) {
+                let spawnChance = 0.36;
+                if (mgr.particles.length < 12 && Math.random() < spawnChance) {
+                    mgr.particles.push(new FlowParticle(0, mgr.speedBase));
+                }
+                for (let i = 0; i < mgr.particles.length; i++) {
+                    const p = mgr.particles[i];
+                    p.t += p.speed;
+                    if (p.t >= 1.0) {
+                        mgr.particles.splice(i,1);
+                        i--;
+                    }
+                }
+            }
+        }
+
+        // 绘制静态连线 (虚线)
+        function drawBackgroundAndLines() {
+            ctx.save();
+            ctx.lineWidth = 3;
+            ctx.setLineDash([10, 8]);
+            ctx.strokeStyle = "#8faa8a";
+            ctx.globalAlpha = 0.7;
+            
+            // 太阳能 → 控制器
+            ctx.beginPath();
+            ctx.moveTo(nodes.solar.x, nodes.solar.y);
+            ctx.lineTo(nodes.control.x, nodes.control.y);
+            ctx.stroke();
+            // 控制器 ↔ 蓄电池 (双向)
+            ctx.beginPath();
+            ctx.moveTo(nodes.control.x, nodes.control.y);
+            ctx.lineTo(nodes.battery.x, nodes.battery.y);
+            ctx.stroke();
+            
+            // 控制器 → 过载保护器
+            ctx.beginPath();
+            ctx.moveTo(nodes.control.x, nodes.control.y);
+            ctx.lineTo(nodes.overload.x, nodes.overload.y);
+            ctx.stroke();
+            
+            // 过载保护器 → USB拓展坞 → 5V
+            ctx.beginPath();
+            ctx.moveTo(nodes.overload.x, nodes.overload.y);
+            ctx.lineTo(nodes.usbHub.x, nodes.usbHub.y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(nodes.usbHub.x, nodes.usbHub.y);
+            ctx.lineTo(nodes.load5V.x, nodes.load5V.y);
+            ctx.stroke();
+            
+            // 过载保护器 → 12V
+            ctx.beginPath();
+            ctx.moveTo(nodes.overload.x, nodes.overload.y);
+            ctx.lineTo(nodes.load12V.x, nodes.load12V.y);
+            ctx.stroke();
+            
+            // 过载保护器 → 24V变压器 → 24V负载
+            ctx.beginPath();
+            ctx.moveTo(nodes.overload.x, nodes.overload.y);
+            ctx.lineTo(nodes.trans24V.x, nodes.trans24V.y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(nodes.trans24V.x, nodes.trans24V.y);
+            ctx.lineTo(nodes.load24V.x, nodes.load24V.y);
+            ctx.stroke();
+            
+            // 蓄电池 → 逆变器
+            ctx.beginPath();
+            ctx.moveTo(nodes.battery.x, nodes.battery.y);
+            ctx.lineTo(nodes.inverter.x, nodes.inverter.y);
+            ctx.stroke();
+            
+            ctx.setLineDash([]);
+            ctx.globalAlpha = 1;
+        }
+
+        function drawComponents() {
+            for (const [key, node] of Object.entries(nodes)) {
+                ctx.shadowBlur = 5;
+                ctx.shadowColor = "rgba(0,0,0,0.15)";
+                ctx.fillStyle = "#fef8e7";
+                ctx.strokeStyle = "#46823c";
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.roundRect(node.x - 70, node.y - 40, 140, 80, 18);
+                ctx.fill();
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+                ctx.font = "28px 'Segoe UI Emoji'";
+                ctx.fillStyle = "#2c5e2a";
+                ctx.fillText(node.icon, node.x - 52, node.y - 6);
+                ctx.font = "bold 16px 'Segoe UI'";
+                ctx.fillStyle = "#1e4620";
+                ctx.fillText(node.label, node.x - 42, node.y + 24);
+                
+                if (key === 'battery') {
+                    ctx.font = "bold 14px monospace";
+                    ctx.fillStyle = "#1e5622";
+                    ctx.fillText(`${Math.floor(batterySOC)}%`, node.x + 48, node.y - 14);
+                    ctx.fillStyle = "#ddd";
+                    ctx.fillRect(node.x - 38, node.y - 32, 76, 10);
+                    ctx.fillStyle = batterySOC > 60 ? "#3bb53b" : (batterySOC > 25 ? "#f0a23a" : "#e34234");
+                    ctx.fillRect(node.x - 38, node.y - 32, 76 * (batterySOC/100), 10);
+                }
+            }
+            
+            // 负载详情
+            ctx.font = "bold 12px 'Segoe UI'";
+            ctx.fillStyle = "#2a6b2e";
+            ctx.fillText("5V 直流负载", nodes.load5V.x-50, nodes.load5V.y+32);
+            ctx.font = "11px 'Segoe UI'";
+            ctx.fillStyle = "#3d6b35";
+            let detailY = nodes.load5V.y + 52;
+            for(let item of loadDetails.load5V) {
+                ctx.fillText(item, nodes.load5V.x-58, detailY);
+                detailY += 15;
+            }
+            
+            ctx.font = "bold 12px 'Segoe UI'";
+            ctx.fillStyle = "#2a6b2e";
+            ctx.fillText("12V 水泵", nodes.load12V.x-42, nodes.load12V.y+32);
+            ctx.font = "11px system-ui";
+            ctx.fillStyle = "#3d6b35";
+            ctx.fillText(loadDetails.load12V[0], nodes.load12V.x-42, nodes.load12V.y+52);
+            
+            ctx.font = "bold 12px 'Segoe UI'";
+            ctx.fillStyle = "#2a6b2e";
+            ctx.fillText("24V 制冷/风扇", nodes.load24V.x-58, nodes.load24V.y+32);
+            ctx.font = "11px system-ui";
+            let yOff = nodes.load24V.y + 52;
+            for(let item of loadDetails.load24V) {
+                ctx.fillText(item, nodes.load24V.x-70, yOff);
+                yOff += 14;
+            }
+            
+            ctx.font = "bold 12px 'Segoe UI'";
+            ctx.fillStyle = "#b4582c";
+            ctx.fillText("逆变器 220V", nodes.inverter.x-48, nodes.inverter.y+32);
+            ctx.font = "11px system-ui";
+            ctx.fillStyle = "#8a5a30";
+            ctx.fillText("交流供电", nodes.inverter.x-38, nodes.inverter.y+54);
+            
+            ctx.font = "italic 11px monospace";
+            ctx.fillStyle = "#2c7840";
+            ctx.fillText("USB 5V 扩展", nodes.usbHub.x-28, nodes.usbHub.y+46);
+            ctx.fillText("24V 稳压输出", nodes.trans24V.x-30, nodes.trans24V.y+46);
+            
+            // 高亮过载保护器
+            ctx.beginPath();
+            ctx.arc(nodes.overload.x, nodes.overload.y, 48, 0, 2*Math.PI);
+            ctx.strokeStyle = "#ff9f4a";
+            ctx.lineWidth = 2.8;
+            ctx.setLineDash([5, 8]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            ctx.beginPath();
+            ctx.arc(nodes.control.x, nodes.control.y, 48, 0, 2*Math.PI);
+            ctx.strokeStyle = "#c9882c";
+            ctx.lineWidth = 2.5;
+            ctx.setLineDash([6, 8]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        function drawFlowingParticles() {
+            for (const mgr of pathManagers) {
+                const { fromPos, toPos, particles, pathDef } = mgr;
+                if (!fromPos || !toPos) continue;
+                ctx.beginPath();
+                ctx.moveTo(fromPos.x, fromPos.y);
+                ctx.lineTo(toPos.x, toPos.y);
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = currentMode === 'charge' ? "#f5bc70" : "#5b8eff";
+                ctx.globalAlpha = 0.4;
+                ctx.stroke();
+                ctx.globalAlpha = 1;
+                
+                for (const p of particles) {
+                    const t = p.t;
+                    const x = fromPos.x + (toPos.x - fromPos.x) * t;
+                    const y = fromPos.y + (toPos.y - fromPos.y) * t;
+                    let gradient = ctx.createRadialGradient(x-3, y-3, 3, x, y, 12);
+                    if (currentMode === 'charge') {
+                        gradient.addColorStop(0, '#ffe085');
+                        gradient.addColorStop(1, '#f5a623');
+                    } else {
+                        gradient.addColorStop(0, '#9bc2ff');
+                        gradient.addColorStop(1, '#2c62c9');
+                    }
+                    ctx.beginPath();
+                    ctx.arc(x, y, 7, 0, 2*Math.PI);
+                    ctx.fillStyle = gradient;
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = currentMode === 'charge' ? "#ffbb44" : "#3a86ff";
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3.5, 0, 2*Math.PI);
+                    ctx.fillStyle = "white";
+                    ctx.fill();
+                }
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        function drawFlowAnnotations() {
+            ctx.font = "bold 14px 'Segoe UI'";
+            ctx.fillStyle = "#366e2d";
+            if (currentMode === 'charge') {
+                ctx.fillText("⚡ 光伏能量 → 控制器 → 蓄电池 (充电不经过保护器)", nodes.control.x-140, nodes.control.y-40);
+                ctx.fillStyle = "#d18f2c";
+                ctx.fillText("🔋 储能中 ↑", nodes.battery.x+50, nodes.battery.y-42);
+            } else {
+                ctx.fillStyle = "#2c6e8f";
+                ctx.fillText("🔋 蓄电池放电 → 控制器 → 过载保护器 → 各电压负载", nodes.control.x-170, nodes.control.y-44);
+                ctx.fillStyle = "#1f7fbf";
+                ctx.fillText("⚡ 过载保护器保障后端电路安全", nodes.overload.x-60, nodes.overload.y-50);
+            }
+            ctx.font = "bold 12px monospace";
+            ctx.fillStyle = "#3b7a42";
+            ctx.fillText("◈ 位于控制器下侧，保护负载侧电路 ◈", nodes.overload.x-70, nodes.overload.y+58);
+        }
+
+        function drawRelationGlow() {
+            const ctrl = nodes.control;
+            const ovp = nodes.overload;
+            ctx.beginPath();
+            ctx.moveTo(ctrl.x, ctrl.y);
+            ctx.lineTo(ovp.x, ovp.y);
+            ctx.lineWidth = 5;
+            ctx.strokeStyle = currentMode === 'charge' ? "#ffbb55aa" : "#4d8effaa";
+            ctx.setLineDash([12, 10]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.arc(ovp.x, ovp.y, 22, 0, 2*Math.PI);
+            ctx.fillStyle = "#ffcc77aa";
+            ctx.shadowBlur = 12;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        if (!CanvasRenderingContext2D.prototype.roundRect) {
+            CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+                if (w < 2 * r) r = w / 2;
+                if (h < 2 * r) r = h / 2;
+                this.moveTo(x+r, y);
+                this.lineTo(x+w-r, y);
+                this.quadraticCurveTo(x+w, y, x+w, y+r);
+                this.lineTo(x+w, y+h-r);
+                this.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+                this.lineTo(x+r, y+h);
+                this.quadraticCurveTo(x, y+h, x, y+h-r);
+                this.lineTo(x, y+r);
+                this.quadraticCurveTo(x, y, x+r, y);
+                return this;
+            };
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = "#fafef0";
+            ctx.fillRect(0,0,width,height);
+            for(let i=0;i<width;i+=35){
+                ctx.beginPath();
+                ctx.strokeStyle = "#cbe3cb";
+                ctx.lineWidth = 0.8;
+                ctx.moveTo(i,0);
+                ctx.lineTo(i,height);
+                ctx.stroke();
+                ctx.moveTo(0,i%height);
+                ctx.lineTo(width,i%height);
+                ctx.stroke();
+            }
+            drawBackgroundAndLines();
+            drawComponents();
+            drawRelationGlow();
+            drawFlowingParticles();
+            drawFlowAnnotations();
+            
+            ctx.font = "11px 'Segoe UI'";
+            ctx.fillStyle = "#6b4c2c";
+            ctx.fillText("🔌 USB 5V 多口输出", nodes.load5V.x+45, nodes.load5V.y+32);
+            ctx.fillText("🔋 移动电源直充", nodes.load5V.x+40, nodes.load5V.y+70);
+            ctx.font = "bold 9px monospace";
+            ctx.fillStyle = "#b95f1a";
+            ctx.fillText("过载保护 | 短路保护", nodes.overload.x-35, nodes.overload.y+72);
+        }
+
+        function animate() {
+            updateBatteryByMode();
+            updateParticles();
+            render();
+            requestAnimationFrame(animate);
+        }
+
+        function init() {
+            rebuildPathsByMode();
+            document.getElementById('chargeBtn').addEventListener('click', () => {
+                setMode('charge');
+                rebuildPathsByMode();
+            });
+            document.getElementById('dischargeBtn').addEventListener('click', () => {
+                setMode('discharge');
+                rebuildPathsByMode();
+            });
+            animate();
+        }
+        init();
+    })();
+</script>
+</body>
+</html>
